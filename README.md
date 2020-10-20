@@ -1,8 +1,8 @@
-# (TODO: your game's title)
+# Planet Delivery Man
 
-Author: (TODO: your name)
+Author: Jianrong Yu
 
-Design: (TODO: In two sentences or fewer, describe what is new and interesting about your game.)
+Design: You are a delivery man in a strange new planet. You deliver the packages from each base on the bright side of the planet to the dark side of the planet.
 
 Screen Shot:
 
@@ -10,9 +10,11 @@ Screen Shot:
 
 How To Play:
 
-(TODO: describe the controls and (if needed) goals/strategy.)
+Use WASD to move, SPACE to pick up the package when you are in the base. Walk to the dark side of the planet to deliver the package. 
+You must deliver the package in the order that the packages are picked up!! If you wish you can deliver each package one by one, though that would be really slow. The game will record your fastest time to complete all the delivery.
+The dark side has no color so the trick is to memorize the size of the bases.
 
-Sources: (TODO: list a source URL for any assets you did not create yourself. Make sure you have a license for the asset.)
+Sources: All assets are my own.
 
 This game was built with [NEST](NEST.md).
 

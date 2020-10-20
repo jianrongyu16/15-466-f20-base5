@@ -7,6 +7,9 @@
 
 #include <vector>
 #include <deque>
+#include <unordered_set>
+#include <random>
+#include <limits>
 
 struct PlayMode : Mode {
 	PlayMode();
@@ -23,7 +26,7 @@ struct PlayMode : Mode {
 	struct Button {
 		uint8_t downs = 0;
 		uint8_t pressed = 0;
-	} left, right, down, up;
+	} left, right, down, up, space;
 
 	//local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
@@ -36,4 +39,18 @@ struct PlayMode : Mode {
 		//camera is at player's head and will be pitched by mouse up/down motion:
 		Scene::Camera *camera = nullptr;
 	} player;
+
+	std::vector<Scene::Transform*> brights;
+	std::vector<Scene::Transform*> darks;
+	std::vector<glm::vec3> brights_pos;
+	std::vector<glm::vec3> darks_pos;
+
+    std::deque<size_t> packages;
+    std::unordered_set<size_t> delivered;
+    std::unordered_set<size_t> indelivery;
+
+    float dead = 0.0f;
+	float best_time = std::numeric_limits<float>::max();
+	float timer = 0.0f;
+
 };

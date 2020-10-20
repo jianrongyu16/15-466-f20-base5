@@ -11,17 +11,18 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/quaternion.hpp>
 
-#include <random>
+#include <vector>
+#include <algorithm>
 
 GLuint phonebank_meshes_for_lit_color_texture_program = 0;
 Load< MeshBuffer > phonebank_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("phone-bank.pnct"));
+	MeshBuffer const *ret = new MeshBuffer(data_path("area.pnct"));
 	phonebank_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
 	return ret;
 });
 
 Load< Scene > phonebank_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("phone-bank.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+	return new Scene(data_path("area.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
 		Mesh const &mesh = phonebank_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
@@ -39,13 +40,53 @@ Load< Scene > phonebank_scene(LoadTagDefault, []() -> Scene const * {
 
 WalkMesh const *walkmesh = nullptr;
 Load< WalkMeshes > phonebank_walkmeshes(LoadTagDefault, []() -> WalkMeshes const * {
-	WalkMeshes *ret = new WalkMeshes(data_path("phone-bank.w"));
+	WalkMeshes *ret = new WalkMeshes(data_path("area.w"));
 	walkmesh = &ret->lookup("WalkMesh");
 	return ret;
 });
 
 PlayMode::PlayMode() : scene(*phonebank_scene) {
 	//create a player transform:
+	brights.resize(4);
+    darks.resize(4);
+    brights_pos.resize(4);
+    darks_pos.resize(4);
+
+    for (auto &transform : scene.transforms) {
+
+        if (transform.name == "bright0") {
+            brights[0] = &transform;
+            brights_pos[0] = transform.position;
+        }
+        else if (transform.name == "bright1") {
+            brights[1] = &transform;
+            brights_pos[1] = transform.position;
+        }
+        else if (transform.name == "bright2") {
+            brights[2] = &transform;
+            brights_pos[2] = transform.position;
+        }
+        else if (transform.name == "bright3") {
+            brights[3] = &transform;
+            brights_pos[3] = transform.position;
+        }
+        else if (transform.name == "dark0") {
+            darks[0] = &transform;
+            darks_pos[0] = transform.position;
+        }
+        else if (transform.name == "dark1") {
+            darks[1] = &transform;
+            darks_pos[1] = transform.position;
+        }
+        else if (transform.name == "dark2") {
+            darks[2] = &transform;
+            darks_pos[2] = transform.position;
+        }
+        else if (transform.name == "dark3") {
+            darks[3] = &transform;
+            darks_pos[3] = transform.position;
+        }
+    }
 	scene.transforms.emplace_back();
 	player.transform = &scene.transforms.back();
 
@@ -64,6 +105,7 @@ PlayMode::PlayMode() : scene(*phonebank_scene) {
 	player.camera->transform->rotation = glm::angleAxis(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
 	//start player walking at nearest walk point:
+    player.transform->position = glm::vec3(0.0, 0.0, 3.0f);
 	player.at = walkmesh->nearest_walk_point(player.transform->position);
 
 }
@@ -107,7 +149,10 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		} else if (evt.key.keysym.sym == SDLK_s) {
 			down.pressed = false;
 			return true;
-		}
+		} else if (evt.key.keysym.sym == SDLK_SPACE) {
+            space.pressed = true;
+            return true;
+        }
 	} else if (evt.type == SDL_MOUSEBUTTONDOWN) {
 		if (SDL_GetRelativeMouseMode() == SDL_FALSE) {
 			SDL_SetRelativeMouseMode(SDL_TRUE);
@@ -136,7 +181,71 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	return false;
 }
 
+bool detectInside(glm::vec3 position1, glm::vec3 position2, float radius){
+    return glm::dot(position1-position2, position1-position2)<std::pow(radius<1.0f?1.0f:radius, 2);
+}
+
+void randomize(std::vector<Scene::Transform*> &holders, std::vector<glm::vec3> &pos){
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(pos.begin(), pos.end(), g);
+    for (size_t i=0; i<holders.size(); i++){
+        holders[i]->position = pos[i];
+    }
+}
+
 void PlayMode::update(float elapsed) {
+    if (dead - elapsed > 0) {
+        dead -= elapsed;
+        return;
+    } else if (dead>0) {
+        dead = 0;
+        timer = 0.0f;
+        packages.clear();
+        delivered.clear();
+        indelivery.clear();
+        randomize(brights, brights_pos);
+        randomize(darks, darks_pos);
+        player.transform->position = glm::vec3(0.0, 0.0, 3.0f);
+        player.at = walkmesh->nearest_walk_point(player.transform->position);
+    } else {
+        timer+=elapsed;
+    }
+    if (space.pressed){
+        if (player.transform->position.z>0){
+            for (size_t i=0; i< brights.size(); i++){
+                if (detectInside(player.transform->position, brights[i]->position, brights[i]->scale.x)){
+                    if (delivered.find(i)==delivered.end()&&indelivery.find(i)==indelivery.end()) {
+                        packages.push_back(i);
+                        indelivery.insert(i);
+                    }
+                    break;
+                }
+            }
+
+        } else {
+            for (size_t i=0; i< darks.size(); i++){
+                if (detectInside(player.transform->position, darks[i]->position, darks[i]->scale.x)){
+                    if (packages.empty()) dead = 2.0f;
+                    else {
+                        size_t p = packages.front();
+                        packages.pop_front();
+                        if (p!=i) dead = 2.0f;
+                        else {
+                            delivered.insert(i);
+                            indelivery.erase(i);
+                        }
+                        if (delivered.size()==4) {
+                            dead=2.0f;
+                            best_time = std::min(timer, best_time);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        space.pressed = false;
+    }
 	//player walking:
 	{
 		//combine inputs into a move:
@@ -202,7 +311,6 @@ void PlayMode::update(float elapsed) {
 
 		//update player's position to respect walking:
 		player.transform->position = walkmesh->to_world_point(player.at);
-
 		{ //update player's rotation to respect local (smooth) up-vector:
 			
 			glm::quat adjust = glm::rotation(
@@ -241,7 +349,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
 	glUseProgram(0);
 
-	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -260,7 +368,36 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			0.0f, 0.0f, 0.0f, 1.0f
 		));
 
-		constexpr float H = 0.09f;
+        std::string s0 = "packages in delivery: " + std::to_string(indelivery.size());
+        std::string s1 = "time: " + std::to_string(timer);
+        std::string s2 = "packages delivered: " + std::to_string(delivered.size());
+        std::string s3 = "best time: " + std::to_string(best_time==std::numeric_limits<float>::max()?0:best_time);
+        std::string s4 = "Wrong Delivery!!";
+        std::string s5 = "Finished!! Can you do better?";
+
+        constexpr float H = 0.09f;
+        lines.draw_text(s3,
+                        glm::vec3(1.0f, 0.9f, 0.0),
+                        glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                        glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+        lines.draw_text(s0,
+                        glm::vec3(1.0f, 0.8f, 0.0),
+                        glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                        glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+        lines.draw_text(s2,
+                        glm::vec3(1.0f, 0.7f, 0.0),
+                        glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                        glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+        lines.draw_text(s1,
+                        glm::vec3(1.0f, 0.6f, 0.0),
+                        glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                        glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+
+        if (dead>0)lines.draw_text(delivered.size()==4?s5:s4,
+                                   glm::vec3(0, 0, 0.0),
+                                   glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+                                   glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+
 		lines.draw_text("Mouse motion looks; WASD moves; escape ungrabs mouse",
 			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
